@@ -1,0 +1,1 @@
+postgresql://blksci_danilo:4OM5As10&6q!kvW^Vk@replica-test-fildev-network-protocol-5870.a.timescaledb.io:13573/sentinel
