@@ -1,15 +1,17 @@
+# Dependences
 import json
 import requests as req
 import plotly.express as px
 import pandas as pd
 from sqlalchemy import create_engine
 
+# Prepare SQL connection string to be used on the functions
 CONN_STRING_PATH = 'config/sentinel-conn-string.txt'
 
 with open(CONN_STRING_PATH, 'r') as fid:
     conn_string = fid.read()
 
-### Functions
+# Visualizations
 
 def relative_token_distribution():
     connection = create_engine(conn_string, pool_recycle=3600).connect()
@@ -101,6 +103,7 @@ def absolute_token_distribution():
                         'variable': 'Token status'})
     return fig
 
+
 def fil_price():
     r = req.get('https://api.coingecko.com/api/v3/coins/filecoin/market_chart?vs_currency=usd&days=max')
     d = json.loads(r.content)['prices']
@@ -115,8 +118,8 @@ def fil_price():
                         'price': 'FIL / USD'})
     return fig
 
-def reward_vesting_per_day():
 
+def reward_vesting_per_day():
     connection = create_engine(conn_string, pool_recycle=3600).connect()
 
     QUERY = f"""
@@ -174,10 +177,9 @@ def reward_vesting_per_day():
                 log_y=True)
     return fig
 
-### Graphs
-
-GRAPHS = [#relative_token_distribution(),
-          #absolute_token_distribution(),
-          fil_price(),
-          #reward_vesting_per_day()
-          ]
+# Visualizations to be show on the Dash App, order-sensitive.
+FIGURES = [#relative_token_distribution(),
+           #absolute_token_distribution(),
+           fil_price(),
+           #reward_vesting_per_day()
+           ]
