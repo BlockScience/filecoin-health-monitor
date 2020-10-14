@@ -176,8 +176,8 @@ def reward_vesting_per_day():
 
 ### Graphs
 
-GRAPHS = [relative_token_distribution(),
-          absolute_token_distribution(),
+GRAPHS = [#relative_token_distribution(),
+          #absolute_token_distribution(),
           fil_price(),
           #reward_vesting_per_day()
           ]
