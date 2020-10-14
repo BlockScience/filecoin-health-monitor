@@ -1,11 +1,11 @@
 # filecoin-health-monitor
 
-App engine link: https://filecoin-272720.uc.r.appspot.com
+App engine link: https://filecoin-health-monitor.herokuapp.com/
+Username: file
+password: coin
 
 ## Deploying
 
 ``
-gcloud auth application-default login
-gcloud config set project filecoin-272720
-gcloud app deploy 
+git push heroku
 ``

@@ -1,1 +1,1 @@
-postgresql://blksci_danilo:4OM5As10&6q!kvW^Vk@replica-test-fildev-network-protocol-5870.a.timescaledb.io:13573/sentinel
+postgresql://blksci_danilo:1U9zAHG8euc7dQMYKARUhr4cvR2OZlSe@replica-spacerace-fildev-network-protocol-5870.a.timescaledb.io:13573/comp0_large_staging_sentinel
