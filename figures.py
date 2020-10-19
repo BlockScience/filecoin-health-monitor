@@ -234,8 +234,8 @@ def relative_qa_power_distribution():
                   x='time',
                   y='value',
                   color='variable',
-                  title='QA Power distribution',
-                  labels={'value': '\% qaNP',
+                  title='QA Power distribution rel. to the realized power)',
+                  labels={'value': '/% QA Power',
                           'time': 'Timestamp',
                           'variable': 'kind'})
     return fig
