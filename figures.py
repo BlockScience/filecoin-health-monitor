@@ -12,8 +12,6 @@ with open(CONN_STRING_PATH, 'r') as fid:
     conn_string = fid.read()
 
 # Visualizations
-
-
 def relative_token_distribution():
     connection = create_engine(conn_string, pool_recycle=3600).connect()
     QUERY = """
@@ -211,6 +209,36 @@ def absolute_qa_power_distribution():
     return fig
 
 
+def network_RB_power_distribution():
+    connection = create_engine(conn_string, pool_recycle=3600).connect()
+
+    QUERY = """
+        SELECT 
+        total_raw_bytes_power::numeric * 2^(-50) AS total_power,
+        total_raw_bytes_committed::numeric * 2^(-50) AS total_committed,
+        bh.timestamp AS time
+        FROM chain_powers cp
+        LEFT JOIN block_headers bh
+        ON bh.parent_state_root = cp.state_root
+        ORDER BY bh.timestamp ASC
+        """
+
+    df = (pd.read_sql(QUERY, connection)
+            .assign(time=lambda df: pd.to_datetime(df.time, unit='s'))
+          )
+
+    fig_df = df.melt(id_vars=['time'])
+    fig = px.line(fig_df,
+                  x='time',
+                  y='value',
+                  color='variable',
+                  title='RB Power distribution',
+                  labels={'value': 'Bytes',
+                          'time': 'Timestamp',
+                          'variable': 'Metric'})
+    return fig
+
+
 def relative_qa_power_distribution():
     connection = create_engine(conn_string, pool_recycle=3600).connect()
 
@@ -240,11 +268,289 @@ def relative_qa_power_distribution():
                           'variable': 'kind'})
     return fig
 
+
+def qa_power_velocity_estimate():
+    connection = create_engine(conn_string, pool_recycle=3600).connect()
+
+    QUERY = """
+        SELECT 
+        (cp.qa_smoothed_velocity_estimate::numeric * 2^(-128) * 2^(-50)) AS velocity_estimate,
+        bh.timestamp AS time
+        FROM chain_powers cp
+        LEFT JOIN block_headers bh
+        ON bh.parent_state_root = cp.state_root
+        ORDER BY bh.timestamp ASC
+            """
+
+    df = (pd.read_sql(QUERY, connection)
+            .assign(time=lambda df: pd.to_datetime(df.time, unit='s'))
+          )
+
+    fig_df = df.melt(id_vars=['time'])
+    fig = px.line(fig_df,
+                  x='time',
+                  y='value',
+                  color='variable',
+                  title='QA Power Velocity Estimate',
+                  labels={'value': 'Filwatts / Epoch',
+                          'time': 'Timestamp',
+                          'variable': 'Metric'})
+    return fig
+
+def per_epoch_reward_actual():
+    connection = create_engine(conn_string, pool_recycle=3600).connect()
+
+    QUERY = """
+       SELECT
+        (cr.new_reward::numeric * 1e-18) as Per_Epoch_Reward_Actual,
+        bh.timestamp AS time
+        FROM chain_rewards cr
+        LEFT JOIN block_headers bh
+        ON bh.parent_state_root = cr.state_root
+        ORDER BY bh.timestamp ASC
+        """
+    df = (pd.read_sql(QUERY, connection)
+        .assign(time=lambda df: pd.to_datetime(df.time, unit='s'))
+        )
+
+    fig_df = df.melt(id_vars=['time'])
+    fig = px.line(fig_df,
+                  x='time',
+                  y='value',
+                  color='variable',
+                  title='Per Epoch Reward Actual',
+                  labels={'value': 'Fil',
+                          'time': 'Timestamp',
+                          'variable': 'Metric'})
+    return fig
+
+def per_epoch_reward_estimate():
+    connection = create_engine(conn_string, pool_recycle=3600).connect()
+
+    QUERY = """
+        SELECT
+        (cr.new_reward_smoothed_position_estimate::numeric * 2^(-128) * 1e-18) as Per_Epoch_Reward_Position_Estimate,
+        bh.timestamp AS time
+        FROM chain_rewards cr
+        LEFT JOIN block_headers bh
+        ON bh.parent_state_root = cr.state_root
+        ORDER BY bh.timestamp ASC
+        """
+    df = (pd.read_sql(QUERY, connection)
+        .assign(time=lambda df: pd.to_datetime(df.time, unit='s'))
+        )
+
+    fig_df = df.melt(id_vars=['time'])
+    fig = px.line(fig_df,
+                  x='time',
+                  y='value',
+                  color='variable',
+                  title='Per Epoch Reward Position Estimate',
+                  labels={'value': 'Fil',
+                          'time': 'Timestamp',
+                          'variable': 'Metric'})
+    return fig
+
+def per_epoch_reward_velocity_estimate():
+    connection = create_engine(conn_string, pool_recycle=3600).connect()
+
+    QUERY = """
+        SELECT
+        (cr.new_reward_smoothed_velocity_estimate::numeric * 2^(-128) * 1e-18) as Per_Epoch_Reward_Velocity_Estimate,
+        bh.timestamp AS time
+        FROM chain_rewards cr
+        LEFT JOIN block_headers bh
+        ON bh.parent_state_root = cr.state_root
+        ORDER BY bh.timestamp ASC
+        """
+    df = (pd.read_sql(QUERY, connection)
+        .assign(time=lambda df: pd.to_datetime(df.time, unit='s'))
+        )
+
+    fig_df = df.melt(id_vars=['time'])
+    fig = px.line(fig_df,
+                  x='time',
+                  y='value',
+                  color='variable',
+                  title='Per Epoch Reward Velocity Estimate',
+                  labels={'value': 'Fil / epoch',
+                          'time': 'Timestamp',
+                          'variable': 'Metric'})
+    return fig
+
+# TODO
+def number_of_deals_made():
+    connection = create_engine(conn_string, pool_recycle=3600).connect()
+
+    QUERY = """
+        SELECT 
+        COUNT(deal_id) as Number_of_deals
+        FROM market_deal_states
+        WHERE
+        last_update_epoch > 0
+        """
+    df = (pd.read_sql(QUERY, connection)
+        .assign(time=lambda df: pd.to_datetime(df.time, unit='s'))
+        )
+
+    fig_df = df.melt(id_vars=['time'])
+    fig = px.line(fig_df,
+                  x='time',
+                  y='value',
+                  color='variable',
+                  title='Per Epoch Reward Velocity Estimate',
+                  labels={'value': 'Fil / epoch',
+                          'time': 'Timestamp',
+                          'variable': 'Metric'})
+    return fig
+# TODO
+def upcoming_sector_expiration_by_epoch():
+    connection = create_engine(conn_string, pool_recycle=3600).connect()
+
+    QUERY = """
+        SELECT 
+        COUNT(info.expiration_epoch) AS Upcoming_Sector_Expiration,
+        to_timestamp(bh.timestamp) AS Date
+        FROM miner_sector_infos as info
+        LEFT JOIN block_headers bh
+        ON bh.parent_state_root = info.state_root
+        WHERE
+        to_timestamp(info.expiration_epoch) > Now()
+        GROUP BY
+        Date
+        """
+    df = (pd.read_sql(QUERY, connection)
+        .assign(time=lambda df: pd.to_datetime(df.time, unit='s'))
+        )
+
+    fig_df = df.melt(id_vars=['time'])
+    fig = px.line(fig_df,
+                  x='time',
+                  y='value',
+                  color='variable',
+                  title='Per Epoch Reward Velocity Estimate',
+                  labels={'value': 'Sectors',
+                          'time': 'Timestamp',
+                          'variable': 'Metric'})
+    return fig
+
+def number_of_deals_made():
+    connection = create_engine(conn_string, pool_recycle=3600).connect()
+
+    QUERY = """
+        SELECT 
+        COUNT(deal_id) as Number_of_deals_made,
+        to_timestamp(bh.timestamp) AS Date
+        FROM market_deal_states as info
+        LEFT JOIN block_headers bh
+        ON bh.parent_state_root = info.state_root
+        WHERE
+        info.last_update_epoch > 0
+        GROUP BY
+        Date
+        """
+    df = (pd.read_sql(QUERY, connection))
+
+    df['Day'] = pd.to_datetime(df['date']).dt.strftime('%m/%d/%Y')
+    del df['date']
+    updated_df = df.groupby('Day',as_index=False).count()
+    updated_df['number_of_deals_made_cumulated'] = updated_df.number_of_deals_made.cumsum()
+    
+    fig = px.line(updated_df,
+                  x='Day',
+                  y=['number_of_deals_made','number_of_deals_made_cumulated'],
+                  color='variable',
+                  title='Number of Deals Made',
+                  labels={'value': 'Number of Deals',
+                          'Day': 'Timestamp',
+                          'variable': 'Metric'})
+    return fig
+
+def number_of_terminated_deals():
+    connection = create_engine(conn_string, pool_recycle=3600).connect()
+
+    QUERY = """
+        SELECT 
+        COUNT(deal_id) as number_of_terminated_deals,
+        to_timestamp(bh.timestamp) AS Date
+        FROM market_deal_states as info
+        LEFT JOIN block_headers bh
+        ON bh.parent_state_root = info.state_root
+        WHERE
+        info.slash_epoch > 0
+        GROUP BY
+        Date
+        """
+    df = (pd.read_sql(QUERY, connection))
+
+    df['Day'] = pd.to_datetime(df['date']).dt.strftime('%m/%d/%Y')
+    del df['date']
+    updated_df = df.groupby('Day',as_index=False).count()
+    updated_df['number_of_terminated_deals_cumulated'] = updated_df.number_of_terminated_deals.cumsum()
+    
+    fig = px.line(updated_df,
+                  x='Day',
+                  y=['number_of_terminated_deals','number_of_terminated_deals_cumulated'],
+                  color='variable',
+                  title='Number of Terminated Deals',
+                  labels={'value': 'Number of Terminated Deals',
+                          'Day': 'Timestamp',
+                          'variable': 'Metric'})
+    return fig
+
+
+def verified_client_deals_proportion():
+    connection = create_engine(conn_string, pool_recycle=3600).connect()
+
+    QUERY = """
+        SELECT
+        mdp.deal_id,
+        mdp.is_verified,
+        bh.timestamp AS time
+        FROM market_deal_proposals as mdp
+        LEFT JOIN block_headers bh
+        ON bh.parent_state_root = mdp.state_root
+        """
+    df = (pd.read_sql(QUERY, connection))
+
+    verified_df = df[df['is_verified'] == True]
+
+    df['day'] = pd.to_datetime(df['time'],unit='s').dt.strftime('%m/%d/%Y')
+    verified_df['day'] = pd.to_datetime(verified_df['time'],unit='s').dt.strftime('%m/%d/%Y')
+    updated_df=df.groupby('day',as_index=False).count()
+    updated_verified_df = verified_df.groupby('day',as_index=False).count()
+    updated_df = updated_df[['day','deal_id']] 
+    updated_verified_df = updated_verified_df[['day','deal_id']]
+    updated_verified_df['number_of_verified_deals'] = updated_verified_df['deal_id']
+    Proportion = updated_df.merge(updated_verified_df,how='left')
+    Proportion['verified_client_deals_proportion_cumulated'] = Proportion.number_of_verified_deals.cumsum()
+    Proportion['number_of_deals'] = Proportion['deal_id']
+
+    Proportion.fillna(0,inplace=True)
+    
+    fig = px.line(Proportion,
+                  x='day',
+                  y=['number_of_deals','number_of_verified_deals','verified_client_deals_proportion_cumulated'],
+                  color='variable',
+                  title='Number of Verified Deals',
+                  labels={'value': 'Number of Deals',
+                          'Day': 'Timestamp',
+                          'variable': 'Metric'})
+    return fig
+
 # Visualizations to be show on the Dash App, order-sensitive.
 FIGURES = [#relative_token_distribution(),
            #absolute_token_distribution(),
            fil_price(),
+           network_RB_power_distribution(),
            absolute_qa_power_distribution(),
            relative_qa_power_distribution(),
+           qa_power_velocity_estimate(),
+           per_epoch_reward_actual(),
+           per_epoch_reward_estimate(),
+           per_epoch_reward_velocity_estimate(),
+           number_of_deals_made(),
+           verified_client_deals_proportion(),
+           #number_of_terminated_deals(), # No data currently
            #reward_vesting_per_day()
            ]
