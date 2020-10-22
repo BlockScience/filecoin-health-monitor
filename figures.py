@@ -205,7 +205,7 @@ def absolute_qa_power_distribution():
                   title='QA Power distribution',
                   labels={'value': 'Filwatts',
                           'time': 'Timestamp',
-                          'variable': 'kind'})
+                          'variable': 'Metric'})
     return fig
 
 
@@ -265,7 +265,7 @@ def relative_qa_power_distribution():
                   title='QA Power distribution rel. to the realized power)',
                   labels={'value': '/% QA Power',
                           'time': 'Timestamp',
-                          'variable': 'kind'})
+                          'variable': 'Metric'})
     return fig
 
 
@@ -434,6 +434,8 @@ def upcoming_sector_expiration_by_epoch():
                           'variable': 'Metric'})
     return fig
 
+    
+
 def number_of_deals_made():
     connection = create_engine(conn_string, pool_recycle=3600).connect()
 
@@ -538,6 +540,38 @@ def verified_client_deals_proportion():
                           'variable': 'Metric'})
     return fig
 
+
+def projection_of_the_fault_fee_per_unit_of_qa_power():
+    connection = create_engine(conn_string, pool_recycle=3600).connect()
+
+    QUERY = """
+        SELECT 
+        (cr.new_reward_smoothed_position_estimate::float + 2.14 * (24 * 60 * 2) * new_reward_smoothed_velocity_estimate::float) / (2^30 * cp.total_qa_bytes_power::float) as projection,
+        bh.timestamp AS time
+        FROM chain_rewards cr
+        LEFT JOIN block_headers bh
+        ON bh.parent_state_root = cr.state_root
+        LEFT JOIN chain_powers cp
+        ON cp.state_root = bh.parent_state_root
+        ORDER BY bh.timestamp ASC
+        """
+    df = (pd.read_sql(QUERY, connection)
+        .assign(time=lambda df: pd.to_datetime(df.time, unit='s'))
+        )
+
+    fig_df = df.melt(id_vars=['time'])
+
+    fig = px.line(fig_df,
+                  x='time',
+                  y='variable',
+                  color='variable',
+                  title='Projection of the fault fee per unit of 32 QA Power',
+                  labels={'value': 'FIL / Filwatt',
+                          'time': 'Timestamp',
+                          'variable': 'Metric'})
+    return fig
+
+
 # Visualizations to be show on the Dash App, order-sensitive.
 FIGURES = [#relative_token_distribution(),
            #absolute_token_distribution(),
@@ -549,8 +583,10 @@ FIGURES = [#relative_token_distribution(),
            per_epoch_reward_actual(),
            per_epoch_reward_estimate(),
            per_epoch_reward_velocity_estimate(),
+           #upcoming_sector_expiration_by_epoch(), # nothing there
            number_of_deals_made(),
            verified_client_deals_proportion(),
            #number_of_terminated_deals(), # No data currently
            #reward_vesting_per_day()
+           #projection_of_the_fault_fee_per_unit_of_qa_power(), # no data
            ]
