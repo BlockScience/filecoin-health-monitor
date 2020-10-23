@@ -556,6 +556,34 @@ def verified_client_deals_proportion(connection):
         fig = None
     return fig
 
+def initial_storage_pledge_per_32gib(connection):
+    QUERY = """
+        WITH estimate AS (
+                SELECT
+                (cr.new_reward_smoothed_position_estimate::float
+                + 20 * (24 * 60 * 2) * new_reward_smoothed_velocity_estimate::float)
+                / (2^(128) * 1e18 * 2^(-35) * cp.total_qa_bytes_power::float) AS projection,
+                cr.state_root AS state_root
+                FROM chain_rewards cr
+                LEFT JOIN chain_powers cp
+                ON cp.state_root = cr.state_root
+        )
+        SELECT
+        AVG(est.projection) AS value,
+        to_timestamp(MIN(bh.timestamp)) AS time
+        FROM estimate est
+        LEFT JOIN block_headers bh
+        ON bh.parent_state_root = est.state_root
+        GROUP BY date_trunc('hour', to_timestamp(bh.timestamp))
+        """
+    df = (pd.read_sql(QUERY, connection)
+          .assign(time=lambda df: pd.to_datetime(df.time, unit='s'))
+          )
+    VIZ_PARAMS = {'title': 'Initial Storage Pledge per 32 GiB of QA power',
+                  'labels': {'value': 'FIL / (32 GiB QA Power)'}}
+    fig = simple_time_series(df, VIZ_PARAMS)
+    return fig
+
 
 def projection_of_the_fault_fee_per_unit_of_qa_power(connection):
     QUERY = """
@@ -623,6 +651,7 @@ FIGURES_FUNCTIONS = [
     verified_client_deals_proportion,  # 1.8s | okay
     number_of_terminated_deals,  # 0.5s | no data
     reward_vesting_per_day,  # 0.4s | no data
+    initial_storage_pledge_per_32gib, # 1.0s | okay
     projection_of_the_fault_fee_per_unit_of_qa_power  # 1.8s | okay
 ]
 
