@@ -87,18 +87,30 @@ def relative_token_distribution(connection):
 
 def absolute_token_distribution(connection):
     QUERY = """
-        SELECT 
-        avg(ce.circulating_fil::NUMERIC) / 1e18 AS circulating_fil,
-        avg(ce.vested_fil::NUMERIC) / 1e18 AS vested_fil,
-        avg(ce.mined_fil::NUMERIC) / 1e18 AS mined_fil,
-        avg(ce.burnt_fil::NUMERIC) / 1e18 AS burnt_fil,
-        avg(ce.locked_fil::NUMERIC) / 1e18 AS locked_fil,
-        min(to_timestamp(b.timestamp)) AS time
-        FROM chain_economics ce
-        LEFT JOIN block_headers b 
-        ON b.parent_state_root = ce.parent_state_root
-        GROUP BY ce.parent_state_root
-        ORDER BY time ASC
+            WITH td AS (
+                SELECT 
+                ce.circulating_fil::NUMERIC / 1e18 AS circulating_fil,
+                ce.vested_fil::NUMERIC / 1e18 AS vested_fil,
+                ce.mined_fil::NUMERIC / 1e18 AS mined_fil,
+                ce.burnt_fil::NUMERIC / 1e18 AS burnt_fil,
+                ce.locked_fil::NUMERIC / 1e18 AS locked_fil,
+                min(to_timestamp(b.timestamp)) AS timestamp
+                FROM chain_economics ce
+                LEFT JOIN block_headers b 
+                ON b.parent_state_root = ce.parent_state_root
+                GROUP BY ce.parent_state_root
+                ORDER BY timestamp asc
+            )
+            SELECT
+            AVG(td.circulating_fil) AS fil_circulating_fraction,
+            AVG(td.vested_fil) AS fil_vested_fraction,
+            AVG(td.mined_fil) AS fil_mined_fraction,
+            AVG(td.burnt_fil) AS fil_burnt_fraction,
+            AVG(td.locked_fil) AS fil_locked_fraction,
+            MIN(td.timestamp) AS time
+            FROM td
+            GROUP BY date_trunc('hour', td.timestamp)
+            ORDER BY time
             """
 
     df = (pd.read_sql(QUERY, connection)
@@ -200,14 +212,14 @@ def reward_vesting_per_day(connection):
 def absolute_qa_power_distribution(connection):
     QUERY = """
         SELECT 
-        total_qa_bytes_power::numeric * 2^(-50) AS total_power,
-        total_qa_bytes_committed::numeric * 2^(-50) as total_committed,
-        qa_smoothed_position_estimate::numeric * 2^(-128) * 2^(-50) AS position_estimate,
-        bh.timestamp AS time
+        AVG(total_qa_bytes_power::numeric) * 2^(-50) AS total_power,
+        AVG(total_qa_bytes_committed::numeric) * 2^(-50) as total_committed,
+        AVG(qa_smoothed_position_estimate::numeric) * 2^(-128) * 2^(-50) AS position_estimate,
+        MIN(bh.timestamp) AS time
         FROM chain_powers cp
         LEFT JOIN block_headers bh
         ON bh.parent_state_root = cp.state_root
-        ORDER BY bh.timestamp ASC
+        GROUP BY date_trunc('hour',  to_timestamp(bh.timestamp))
             """
 
     df = (pd.read_sql(QUERY, connection)
@@ -229,13 +241,13 @@ def absolute_qa_power_distribution(connection):
 def network_RB_power_distribution(connection):
     QUERY = """
         SELECT 
-        total_raw_bytes_power::numeric * 2^(-50) AS total_power,
-        total_raw_bytes_committed::numeric * 2^(-50) AS total_committed,
-        bh.timestamp AS time
+        avg(total_raw_bytes_power::numeric) * 2^(-50) AS total_power,
+        avg(total_raw_bytes_committed::numeric) * 2^(-50) AS total_committed,
+        min(bh.timestamp) AS time
         FROM chain_powers cp
         LEFT JOIN block_headers bh
         ON bh.parent_state_root = cp.state_root
-        ORDER BY bh.timestamp ASC
+        GROUP BY date_trunc('hour', to_timestamp(bh.timestamp))
         """
 
     df = (pd.read_sql(QUERY, connection)
@@ -257,13 +269,13 @@ def network_RB_power_distribution(connection):
 def relative_qa_power_distribution(connection):
     QUERY = """
         SELECT 
-        (total_qa_bytes_committed::numeric / total_qa_bytes_power::numeric) as total_committed,
-        (qa_smoothed_position_estimate::numeric * 2^(-128) / total_qa_bytes_power::numeric) AS position_estimate,
-        bh.timestamp AS time
+        AVG(total_qa_bytes_committed::numeric / total_qa_bytes_power::numeric) as total_committed,
+        AVG(qa_smoothed_position_estimate::numeric * 2^(-128) / total_qa_bytes_power::numeric) AS position_estimate,
+        MIN(bh.timestamp) AS time
         FROM chain_powers cp
         LEFT JOIN block_headers bh
         ON bh.parent_state_root = cp.state_root
-        ORDER BY bh.timestamp ASC
+        GROUP BY date_trunc('hour',  to_timestamp(bh.timestamp))
             """
 
     df = (pd.read_sql(QUERY, connection)
@@ -285,12 +297,12 @@ def relative_qa_power_distribution(connection):
 def qa_power_velocity_estimate(connection):
     QUERY = """
         SELECT 
-        (cp.qa_smoothed_velocity_estimate::numeric * 2^(-128) * 2^(-50)) AS velocity_estimate,
-        bh.timestamp AS time
+        AVG(cp.qa_smoothed_velocity_estimate::numeric * 2^(-128) * 2^(-50)) AS velocity_estimate,
+        MIN(bh.timestamp) AS time
         FROM chain_powers cp
         LEFT JOIN block_headers bh
         ON bh.parent_state_root = cp.state_root
-        ORDER BY bh.timestamp ASC
+        GROUP BY date_trunc('hour',  to_timestamp(bh.timestamp))
             """
 
     df = (pd.read_sql(QUERY, connection)
@@ -394,43 +406,17 @@ def per_epoch_reward_velocity_estimate(connection):
 # TODO
 
 
-def number_of_deals_made(connection):
-    QUERY = """
-        SELECT 
-        COUNT(deal_id) as Number_of_deals
-        FROM market_deal_states
-        WHERE
-        last_update_epoch > 0
-        """
-    df = (pd.read_sql(QUERY, connection)
-          .assign(time=lambda df: pd.to_datetime(df.time, unit='s'))
-          )
-
-    fig_df = df.melt(id_vars=['time'])
-    fig = px.line(fig_df,
-                  x='time',
-                  y='value',
-                  color='variable',
-                  title='Per Epoch Reward Velocity Estimate',
-                  labels={'value': 'Fil / epoch',
-                          'time': 'Timestamp',
-                          'variable': 'Metric'})
-    return fig
-
-# TODO
-
-
 def upcoming_sector_expiration_by_epoch(connection):
     QUERY = """
         SELECT 
         COUNT(info.expiration_epoch) AS Upcoming_Sector_Expiration,
-        to_timestamp(bh.timestamp) AS time
+        MIN(bh.timestamp) AS time
         FROM miner_sector_infos as info
         LEFT JOIN block_headers bh
         ON bh.parent_state_root = info.state_root
         WHERE
         to_timestamp(info.expiration_epoch) > Now()
-        GROUP BY time
+        GROUP BY date_trunc('hour',  to_timestamp(bh.timestamp))
         """
     df = (pd.read_sql(QUERY, connection)
           .assign(time=lambda df: pd.to_datetime(df.time, unit='s'))
@@ -452,31 +438,25 @@ def upcoming_sector_expiration_by_epoch(connection):
 def number_of_deals_made(connection):
     QUERY = """
         SELECT 
-        COUNT(deal_id) as Number_of_deals_made,
-        to_timestamp(bh.timestamp) AS Date
+        COUNT(deal_id) as number_of_deals_made,
+        MIN(bh.timestamp) AS date
         FROM market_deal_states as info
         LEFT JOIN block_headers bh
         ON bh.parent_state_root = info.state_root
         WHERE
         info.last_update_epoch > 0
-        GROUP BY
-        Date
+        GROUP BY date_trunc('day',  to_timestamp(bh.timestamp))
         """
-    df = (pd.read_sql(QUERY, connection))
+    df = (pd.read_sql(QUERY, connection).sort_values('date'))
 
-    df['Day'] = pd.to_datetime(df['date']).dt.strftime('%m/%d/%Y')
-    del df['date']
-    updated_df = df.groupby('Day', as_index=False).count()
-    updated_df['number_of_deals_made_cumulated'] = updated_df.number_of_deals_made.cumsum()
+    df['number_of_deals_made_cumulated'] = df.number_of_deals_made.cumsum()
 
-    fig = px.line(updated_df,
-                  x='Day',
+    fig = px.line(df,
+                  x='date',
                   y=['number_of_deals_made', 'number_of_deals_made_cumulated'],
-                  color='variable',
                   title='Number of Deals Made',
                   labels={'value': 'Number of Deals',
-                          'Day': 'Timestamp',
-                          'variable': 'Metric'})
+                          'date': 'Timestamp'})
     return fig
 
 
@@ -484,30 +464,26 @@ def number_of_terminated_deals(connection):
     QUERY = """
         SELECT 
         COUNT(deal_id) as number_of_terminated_deals,
-        to_timestamp(bh.timestamp) AS Date
+        MIN(bh.timestamp) AS date
         FROM market_deal_states as info
         LEFT JOIN block_headers bh
         ON bh.parent_state_root = info.state_root
         WHERE
         info.slash_epoch > 0
-        GROUP BY
-        Date
+        GROUP BY date_trunc('day',  to_timestamp(bh.timestamp))
         """
-    df = (pd.read_sql(QUERY, connection))
+    df = (pd.read_sql(QUERY, connection).sort_values('date'))
 
-    df['Day'] = pd.to_datetime(df['date']).dt.strftime('%m/%d/%Y')
-    del df['date']
-    updated_df = df.groupby('Day', as_index=False).count()
-    updated_df['number_of_terminated_deals_cumulated'] = updated_df.number_of_terminated_deals.cumsum()
+    df['number_of_terminated_deals_cumulated'] = df.number_of_terminated_deals.cumsum()
 
-    if len(updated_df) > 0:
-        fig = px.line(updated_df,
-                      x='Day',
+    if len(df) > 0:
+        fig = px.line(df,
+                      x='date',
                       y=['number_of_terminated_deals',
                           'number_of_terminated_deals_cumulated'],
                       title='Number of Terminated Deals',
                       labels={'value': 'Number of Terminated Deals',
-                              'Day': 'Timestamp'})
+                              'date': 'Timestamp'})
     else:
         fig = None
     return fig
@@ -516,45 +492,23 @@ def number_of_terminated_deals(connection):
 def verified_client_deals_proportion(connection):
     QUERY = """
         SELECT
-        mdp.deal_id,
-        mdp.is_verified,
-        bh.timestamp AS time
+        COUNT(mdp.is_verified) filter (where mdp.is_verified::BOOLEAN) / COUNT(mdp.deal_id) AS verified_fraction,
+        MIN(to_timestamp(bh.timestamp)) AS time
         FROM market_deal_proposals as mdp
         LEFT JOIN block_headers bh
         ON bh.parent_state_root = mdp.state_root
+        GROUP BY date_trunc('hour',  to_timestamp(bh.timestamp))
         """
     df = (pd.read_sql(QUERY, connection))
 
     if len(df) == 0:
         return None
-
-    verified_df = df[df['is_verified'] == True]
-
-    df['day'] = pd.to_datetime(df['time'], unit='s').dt.strftime('%m/%d/%Y')
-    verified_df['day'] = pd.to_datetime(
-        verified_df['time'], unit='s').dt.strftime('%m/%d/%Y')
-    updated_df = df.groupby('day', as_index=False).count()
-    updated_verified_df = verified_df.groupby('day', as_index=False).count()
-    updated_df = updated_df[['day', 'deal_id']]
-    updated_verified_df = updated_verified_df[['day', 'deal_id']]
-    updated_verified_df['number_of_verified_deals'] = updated_verified_df['deal_id']
-    Proportion = updated_df.merge(updated_verified_df, how='left')
-    Proportion['verified_client_deals_proportion_cumulated'] = Proportion.number_of_verified_deals.cumsum()
-    Proportion['number_of_deals'] = Proportion['deal_id']
-
-    Proportion.fillna(0, inplace=True)
-
-    if len(Proportion) > 0:
-        fig = px.line(Proportion,
-                      x='day',
-                      y=['number_of_deals', 'number_of_verified_deals',
-                          'verified_client_deals_proportion_cumulated'],
-                      title='Number of Verified Deals',
-                      labels={'value': 'Number of Deals',
-                              'Day': 'Timestamp'})
     else:
-        fig = None
-    return fig
+        fig = px.line(df,
+                      x='time',
+                      y='verified_fraction',
+                      title='Fraction of Verified Deals')
+        return fig
 
 def initial_storage_pledge_per_32gib(connection):
     QUERY = """
@@ -631,28 +585,24 @@ def time_measure_with_conn(f, connection):
 # %%
 
 
-"""
-Execution time indicated in seconds on a local machine (23oct2020)
-"""
-
 FIGURES_FUNCTIONS = [
-    relative_token_distribution,  # 0.5s | no data
-    absolute_token_distribution,  # 0.3s | no data
-    fil_price,  # 0.7s | okay
-    network_RB_power_distribution,  # 0.9s | okay
-    absolute_qa_power_distribution,  # 0.9s | okay
-    relative_qa_power_distribution,  # 0.8s | okay
-    qa_power_velocity_estimate,  # 0.7s | okay
-    per_epoch_reward_actual,  # 20.7s | okay
-    per_epoch_reward_estimate,  # 18.6s | okay
-    per_epoch_reward_velocity_estimate,  # 21.2s | okay
-    upcoming_sector_expiration_by_epoch,  # 0.3s | no data
-    number_of_deals_made,  # 0.8s | okay
-    verified_client_deals_proportion,  # 1.8s | okay
-    number_of_terminated_deals,  # 0.5s | no data
-    reward_vesting_per_day,  # 0.4s | no data
-    initial_storage_pledge_per_32gib, # 1.0s | okay
-    projection_of_the_fault_fee_per_unit_of_qa_power  # 1.8s | okay
+    relative_token_distribution, 
+    absolute_token_distribution,
+    fil_price, 
+    network_RB_power_distribution, 
+    absolute_qa_power_distribution, 
+    relative_qa_power_distribution, 
+    qa_power_velocity_estimate,
+    per_epoch_reward_actual,  
+    per_epoch_reward_estimate, 
+    per_epoch_reward_velocity_estimate, 
+    upcoming_sector_expiration_by_epoch,  
+    number_of_deals_made, 
+    verified_client_deals_proportion,  
+    number_of_terminated_deals,
+    reward_vesting_per_day, 
+    initial_storage_pledge_per_32gib, 
+    projection_of_the_fault_fee_per_unit_of_qa_power
 ]
 
 connection = create_engine(conn_string, pool_recycle=3600).connect()
