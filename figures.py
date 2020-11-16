@@ -597,10 +597,10 @@ FIGURES_FUNCTIONS = [
     per_epoch_reward_estimate, 
     per_epoch_reward_velocity_estimate, 
     upcoming_sector_expiration_by_epoch,  
-    number_of_deals_made, 
+    # number_of_deals_made, 
     verified_client_deals_proportion,  
     number_of_terminated_deals,
-    reward_vesting_per_day, 
+    # reward_vesting_per_day, 
     initial_storage_pledge_per_32gib, 
     projection_of_the_fault_fee_per_unit_of_qa_power
 ]
